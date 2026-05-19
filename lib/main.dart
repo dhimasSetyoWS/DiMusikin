@@ -1,5 +1,3 @@
-import 'package:dimusikin_project/views/profile/profile.dart';
-import 'package:dimusikin_project/views/search/search.dart';
 import 'package:dimusikin_project/views/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 void main() {
