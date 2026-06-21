@@ -1,21 +1,7 @@
 import 'package:flutter/material.dart';
-
-// Model untuk musik
-class Music {
-  final String title;
-  final String artist;
-  final String album;
-  final String coverUrl;
-  final Duration duration;
-
-  Music({
-    required this.title,
-    required this.artist,
-    required this.album,
-    required this.coverUrl,
-    required this.duration,
-  });
-}
+import '../../models/music_model.dart';
+import '../../controllers/music_controller.dart';
+import '../player/music_player.dart';
 
 // Halaman Collection Musik
 class CollectionPage extends StatefulWidget {
@@ -29,57 +15,20 @@ class _CollectionPageState extends State<CollectionPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _searchQuery = '';
+  final MusicController _controller = MusicController();
 
   // Warna dari requirement
   static const Color primaryColor = Color(0xFF33471D);
   static const Color secondaryColor = Color(0xFFA4A494);
   static const Color otherColor = Color(0xFFF6E5D0);
 
-  // Data dummy untuk demo
-  final List<Music> _allMusic = [
-    Music(
-      title: "Midnight Dreams",
-      artist: "The Wanderers",
-      album: "Night Sessions",
-      coverUrl: "https://via.placeholder.com/150/33471d/ffffff?text=MD",
-      duration: const Duration(minutes: 3, seconds: 45),
-    ),
-    Music(
-      title: "Summer Breeze",
-      artist: "Coastal Waves",
-      album: "Horizon",
-      coverUrl: "https://via.placeholder.com/150/a4a494/ffffff?text=SB",
-      duration: const Duration(minutes: 4, seconds: 12),
-    ),
-    Music(
-      title: "Electric Soul",
-      artist: "Neon Knights",
-      album: "Digital Dreams",
-      coverUrl: "https://via.placeholder.com/150/f6e5d0/33471d?text=ES",
-      duration: const Duration(minutes: 3, seconds: 28),
-    ),
-    Music(
-      title: "Acoustic Sunrise",
-      artist: "Morning Light",
-      album: "Dawn Collection",
-      coverUrl: "https://via.placeholder.com/150/33471d/ffffff?text=AS",
-      duration: const Duration(minutes: 5, seconds: 3),
-    ),
-    Music(
-      title: "Jazz Nights",
-      artist: "The Smooth Collective",
-      album: "Evening Mood",
-      coverUrl: "https://via.placeholder.com/150/a4a494/ffffff?text=JN",
-      duration: const Duration(minutes: 6, seconds: 15),
-    ),
-  ];
-
-  List<Music> get _filteredMusic {
-    if (_searchQuery.isEmpty) return _allMusic;
-    return _allMusic
+  List<MusicModel> get _filteredMusic {
+    final allMusic = _controller.musicList;
+    if (_searchQuery.isEmpty) return allMusic;
+    return allMusic
         .where((music) =>
-            music.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            music.artist.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            music.judul.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            music.artis.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             music.album.toLowerCase().contains(_searchQuery.toLowerCase()))
         .toList();
   }
@@ -88,6 +37,7 @@ class _CollectionPageState extends State<CollectionPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _controller.fetchMusicList();
   }
 
   @override
@@ -96,35 +46,101 @@ class _CollectionPageState extends State<CollectionPage>
     super.dispose();
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return "${twoDigits(duration.inMinutes)}:${twoDigits(duration.inSeconds.remainder(60))}";
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: otherColor,
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildSearchBar(),
-            _buildTabBar(),
-            Expanded(child: _buildMusicList()),
-          ],
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, child) {
+            return Column(
+              children: [
+                _buildHeader(),
+                _buildSearchBar(),
+                _buildTabBar(),
+                Expanded(
+                  child: _controller.isLoading && _controller.musicList.isEmpty
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: primaryColor,
+                          ),
+                        )
+                      : _controller.errorMessage.isNotEmpty && _controller.musicList.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(22),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline_rounded,
+                                      color: Colors.red,
+                                      size: 60,
+                                    ),
+                                    const SizedBox(height: 15),
+                                    Text(
+                                      _controller.errorMessage,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    ElevatedButton.icon(
+                                      onPressed: () => _controller.fetchMusicList(),
+                                      icon: const Icon(Icons.refresh, color: Colors.white),
+                                      label: const Text("Coba Lagi"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : _buildMusicList(),
+                ),
+              ],
+            );
+          },
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: primaryColor,
+        onPressed: () => _showMusicFormSheet(),
+        tooltip: 'Tambah Musik Baru',
+        child: const Icon(Icons.add, color: otherColor, size: 28),
       ),
     );
   }
 
   // Header dengan judul dan stats
   Widget _buildHeader() {
+    final songsCount = _controller.musicList.length;
+    final albumsCount = _controller.musicList
+        .map((m) => m.album.trim().toLowerCase())
+        .where((a) => a.isNotEmpty)
+        .toSet()
+        .length;
+    final artistsCount = _controller.musicList
+        .map((m) => m.artis.trim().toLowerCase())
+        .where((a) => a.isNotEmpty)
+        .toSet()
+        .length;
+
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: primaryColor,
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
@@ -173,11 +189,11 @@ class _CollectionPageState extends State<CollectionPage>
           const SizedBox(height: 20),
           Row(
             children: [
-              _buildStatCard('${_allMusic.length}', 'Songs'),
+              _buildStatCard('$songsCount', 'Songs'),
               const SizedBox(width: 12),
-              _buildStatCard('8', 'Albums'),
+              _buildStatCard('$albumsCount', 'Albums'),
               const SizedBox(width: 12),
-              _buildStatCard('12', 'Artists'),
+              _buildStatCard('$artistsCount', 'Artists'),
             ],
           ),
         ],
@@ -241,11 +257,11 @@ class _CollectionPageState extends State<CollectionPage>
           },
           decoration: InputDecoration(
             hintText: 'Search music, artist, album...',
-            hintStyle: TextStyle(color: secondaryColor),
-            prefixIcon: Icon(Icons.search, color: primaryColor),
+            hintStyle: const TextStyle(color: secondaryColor),
+            prefixIcon: const Icon(Icons.search, color: primaryColor),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
-                    icon: Icon(Icons.clear, color: secondaryColor),
+                    icon: const Icon(Icons.clear, color: secondaryColor),
                     onPressed: () {
                       setState(() {
                         _searchQuery = '';
@@ -295,17 +311,22 @@ class _CollectionPageState extends State<CollectionPage>
 
   // Music List
   Widget _buildMusicList() {
+    final recentSongs = _filteredMusic.take(3).toList();
+    final favoriteSongs = _filteredMusic
+        .where((m) => m.favorit.toLowerCase() == 'true' || m.favorit == '1')
+        .toList();
+
     return TabBarView(
       controller: _tabController,
       children: [
         _buildSongsList(_filteredMusic),
-        _buildSongsList(_filteredMusic.take(3).toList()),
-        _buildSongsList(_filteredMusic.reversed.take(2).toList()),
+        _buildSongsList(recentSongs),
+        _buildSongsList(favoriteSongs),
       ],
     );
   }
 
-  Widget _buildSongsList(List<Music> songs) {
+  Widget _buildSongsList(List<MusicModel> songs) {
     if (songs.isEmpty) {
       return Center(
         child: Column(
@@ -317,7 +338,7 @@ class _CollectionPageState extends State<CollectionPage>
               color: secondaryColor.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No music found',
               style: TextStyle(
                 color: secondaryColor,
@@ -338,7 +359,9 @@ class _CollectionPageState extends State<CollectionPage>
     );
   }
 
-  Widget _buildMusicCard(Music music, int index) {
+  Widget _buildMusicCard(MusicModel music, int index) {
+    final bool isFavorite = music.favorit.toLowerCase() == 'true' || music.favorit == '1';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -357,12 +380,14 @@ class _CollectionPageState extends State<CollectionPage>
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            // Handle music play
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Playing: ${music.title}'),
-                backgroundColor: primaryColor,
-                duration: const Duration(seconds: 2),
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MusicPlayer(
+                  title: music.judul,
+                  artist: music.artis,
+                  fotoSampul: music.fotoSampul,
+                ),
               ),
             );
           },
@@ -372,7 +397,7 @@ class _CollectionPageState extends State<CollectionPage>
               children: [
                 // Cover Image
                 Hero(
-                  tag: 'music_$index',
+                  tag: 'music_collection_${music.id}',
                   child: Container(
                     width: 60,
                     height: 60,
@@ -383,10 +408,10 @@ class _CollectionPageState extends State<CollectionPage>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                        music.coverUrl,
+                        music.fotoSampul,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return Icon(
+                          return const Icon(
                             Icons.music_note,
                             color: primaryColor,
                             size: 30,
@@ -403,7 +428,7 @@ class _CollectionPageState extends State<CollectionPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        music.title,
+                        music.judul,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -414,7 +439,7 @@ class _CollectionPageState extends State<CollectionPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        music.artist,
+                        music.artis,
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFFA4A494),
@@ -423,24 +448,26 @@ class _CollectionPageState extends State<CollectionPage>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        music.album,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: secondaryColor.withOpacity(0.7),
+                      if (music.album.isNotEmpty)
+                        Text(
+                          music.album,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secondaryColor.withOpacity(0.7),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ],
                   ),
                 ),
-                // Duration
+                // Duration & Menu
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      _formatDuration(music.duration),
-                      style: TextStyle(
+                      music.durasi.isNotEmpty ? music.durasi : '00:00',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: secondaryColor,
                         fontWeight: FontWeight.w500,
@@ -448,48 +475,68 @@ class _CollectionPageState extends State<CollectionPage>
                     ),
                     const SizedBox(height: 8),
                     // Menu Button
-                    PopupMenuButton(
-                      icon: Icon(
+                    PopupMenuButton<String>(
+                      icon: const Icon(
                         Icons.more_vert,
                         color: secondaryColor,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _showMusicFormSheet(music);
+                        } else if (value == 'delete') {
+                          _showDeleteConfirmDialog(music);
+                        } else if (value == 'favorite') {
+                          final updated = MusicModel(
+                            id: music.id,
+                            judul: music.judul,
+                            artis: music.artis,
+                            album: music.album,
+                            genre: music.genre,
+                            durasi: music.durasi,
+                            fotoSampul: music.fotoSampul,
+                            urlAudio: music.urlAudio,
+                            jumlahPutar: music.jumlahPutar,
+                            favorit: isFavorite ? 'false' : 'true',
+                            lirik: music.lirik,
+                            tanggalRilis: music.tanggalRilis,
+                          );
+                          _controller.updateMusic(updated);
+                        }
+                      },
                       itemBuilder: (context) => [
                         PopupMenuItem(
+                          value: 'favorite',
                           child: Row(
                             children: [
-                              Icon(Icons.playlist_add, color: primaryColor),
+                              Icon(
+                                isFavorite ? Icons.favorite : Icons.favorite_border,
+                                color: isFavorite ? Colors.red : primaryColor,
+                              ),
                               const SizedBox(width: 12),
-                              const Text('Add to Playlist'),
+                              Text(isFavorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit'),
                             ],
                           ),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
+                          value: 'edit',
                           child: Row(
                             children: [
-                              Icon(Icons.favorite_border, color: primaryColor),
+                              Icon(Icons.edit, color: primaryColor),
                               const SizedBox(width: 12),
-                              const Text('Add to Favorites'),
+                              Text('Edit Musik'),
                             ],
                           ),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
+                          value: 'delete',
                           child: Row(
                             children: [
-                              Icon(Icons.share, color: primaryColor),
+                              Icon(Icons.delete_outline, color: Colors.red),
                               const SizedBox(width: 12),
-                              const Text('Share'),
-                            ],
-                          ),
-                        ),
-                        PopupMenuItem(
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline, color: primaryColor),
-                              const SizedBox(width: 12),
-                              const Text('Info'),
+                              Text('Hapus Musik', style: TextStyle(color: Colors.red)),
                             ],
                           ),
                         ),
@@ -502,6 +549,292 @@ class _CollectionPageState extends State<CollectionPage>
           ),
         ),
       ),
+    );
+  }
+
+  // Dialog Form (Add / Edit)
+  void _showMusicFormSheet([MusicModel? music]) {
+    final isEdit = music != null;
+    final formKey = GlobalKey<FormState>();
+
+    // Controllers
+    final judulController = TextEditingController(text: isEdit ? music.judul : '');
+    final artisController = TextEditingController(text: isEdit ? music.artis : '');
+    final albumController = TextEditingController(text: isEdit ? music.album : '');
+    final genreController = TextEditingController(text: isEdit ? music.genre : '');
+    final durasiController = TextEditingController(text: isEdit ? music.durasi : '03:30');
+    final fotoSampulController = TextEditingController(text: isEdit ? music.fotoSampul : '');
+    final urlAudioController = TextEditingController(text: isEdit ? music.urlAudio : '');
+    final lirikController = TextEditingController(text: isEdit ? music.lirik : '');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: otherColor,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              padding: EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                     mainAxisSize: MainAxisSize.min,
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Align(
+                         alignment: Alignment.center,
+                         child: Container(
+                           width: 50,
+                           height: 5,
+                           decoration: BoxDecoration(
+                             color: secondaryColor.withOpacity(0.5),
+                             borderRadius: BorderRadius.circular(10),
+                           ),
+                         ),
+                       ),
+                       const SizedBox(height: 15),
+                       Text(
+                         isEdit ? 'Edit Musik ✏️' : 'Tambah Musik Baru 🎵',
+                         style: const TextStyle(
+                           color: primaryColor,
+                           fontSize: 22,
+                           fontWeight: FontWeight.bold,
+                         ),
+                       ),
+                       const SizedBox(height: 20),
+                       _buildTextField('Judul Lagu', judulController, true),
+                       const SizedBox(height: 12),
+                       _buildTextField('Nama Artis / Band', artisController, true),
+                       const SizedBox(height: 12),
+                       _buildTextField('Album', albumController, false),
+                       const SizedBox(height: 12),
+                       Row(
+                         children: [
+                           Expanded(child: _buildTextField('Genre', genreController, false)),
+                           const SizedBox(width: 12),
+                           Expanded(child: _buildTextField('Durasi (contoh: 03:45)', durasiController, true)),
+                         ],
+                       ),
+                       const SizedBox(height: 12),
+                       _buildTextField(
+                         'URL Foto Sampul',
+                         fotoSampulController,
+                         false,
+                         hint: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f',
+                       ),
+                       const SizedBox(height: 12),
+                       _buildTextField('URL Audio (MP3)', urlAudioController, false, hint: 'https://example.com/audio.mp3'),
+                       const SizedBox(height: 12),
+                       _buildTextField('Lirik (Opsional)', lirikController, false, maxLines: 3),
+                       const SizedBox(height: 25),
+                       SizedBox(
+                         width: double.infinity,
+                         height: 55,
+                         child: ElevatedButton(
+                           onPressed: isSaving ? null : () async {
+                             if (formKey.currentState!.validate()) {
+                               setModalState(() {
+                                 isSaving = true;
+                               });
+                               
+                               final newOrUpdatedMusic = MusicModel(
+                                 id: isEdit ? music.id : '',
+                                 judul: judulController.text.trim(),
+                                 artis: artisController.text.trim(),
+                                 album: albumController.text.trim(),
+                                 genre: genreController.text.trim(),
+                                 durasi: durasiController.text.trim(),
+                                 fotoSampul: fotoSampulController.text.trim().isNotEmpty
+                                     ? fotoSampulController.text.trim()
+                                     : 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f',
+                                 urlAudio: urlAudioController.text.trim(),
+                                 jumlahPutar: isEdit ? music.jumlahPutar : 0,
+                                 favorit: isEdit ? music.favorit : 'false',
+                                 lirik: lirikController.text.trim(),
+                                 tanggalRilis: isEdit ? music.tanggalRilis : DateTime.now().millisecondsSinceEpoch,
+                               );
+
+                               bool success;
+                               if (isEdit) {
+                                 success = await _controller.updateMusic(newOrUpdatedMusic);
+                               } else {
+                                 success = await _controller.addMusic(newOrUpdatedMusic);
+                               }
+
+                               if (success) {
+                                 Navigator.pop(context);
+                                 ScaffoldMessenger.of(context).showSnackBar(
+                                   SnackBar(
+                                     content: Text(isEdit 
+                                         ? 'Musik "${newOrUpdatedMusic.judul}" berhasil diperbarui!' 
+                                         : 'Musik "${newOrUpdatedMusic.judul}" berhasil ditambahkan!'),
+                                     backgroundColor: primaryColor,
+                                   ),
+                                 );
+                               } else {
+                                 setModalState(() {
+                                   isSaving = false;
+                                 });
+                                 ScaffoldMessenger.of(context).showSnackBar(
+                                   SnackBar(
+                                     content: Text('Gagal menyimpan musik: ${_controller.errorMessage}'),
+                                     backgroundColor: Colors.red,
+                                   ),
+                                 );
+                               }
+                             }
+                           },
+                           style: ElevatedButton.styleFrom(
+                             backgroundColor: primaryColor,
+                             shape: RoundedRectangleBorder(
+                               borderRadius: BorderRadius.circular(15),
+                             ),
+                           ),
+                           child: isSaving 
+                               ? const SizedBox(
+                                   height: 24,
+                                   width: 24,
+                                   child: CircularProgressIndicator(color: otherColor, strokeWidth: 2),
+                                 )
+                               : Text(
+                                   isEdit ? 'Perbarui Musik' : 'Tambah Musik',
+                                   style: const TextStyle(
+                                     color: otherColor,
+                                     fontSize: 16,
+                                     fontWeight: FontWeight.bold,
+                                   ),
+                                 ),
+                         ),
+                       ),
+                     ],
+                   ),
+                 ),
+               ),
+             );
+           },
+         );
+       },
+     );
+   }
+
+   Widget _buildTextField(
+     String label,
+     TextEditingController controller,
+     bool isRequired, {
+     String? hint,
+     int maxLines = 1,
+   }) {
+     return TextFormField(
+       controller: controller,
+       maxLines: maxLines,
+       validator: (value) {
+         if (isRequired && (value == null || value.trim().isEmpty)) {
+           return '$label tidak boleh kosong';
+         }
+         return null;
+       },
+       decoration: InputDecoration(
+         labelText: label,
+         labelStyle: const TextStyle(color: primaryColor, fontWeight: FontWeight.w500),
+         hintText: hint,
+         hintStyle: TextStyle(color: secondaryColor.withOpacity(0.7)),
+         filled: true,
+         fillColor: Colors.white,
+         border: OutlineInputBorder(
+           borderRadius: BorderRadius.circular(15),
+           borderSide: BorderSide.none,
+         ),
+         focusedBorder: OutlineInputBorder(
+           borderRadius: BorderRadius.circular(15),
+           borderSide: const BorderSide(color: primaryColor, width: 1.5),
+         ),
+         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+       ),
+     );
+   }
+
+  // Dialog Konfirmasi Hapus
+  void _showDeleteConfirmDialog(MusicModel music) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: otherColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                'Hapus Musik 🗑️',
+                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+              ),
+              content: Text(
+                'Apakah Anda yakin ingin menghapus lagu "${music.judul}" oleh ${music.artis} dari koleksi?',
+                style: const TextStyle(color: Colors.black87),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(context),
+                  child: const Text('Batal', style: TextStyle(color: secondaryColor)),
+                ),
+                ElevatedButton(
+                  onPressed: isDeleting ? null : () async {
+                    setDialogState(() {
+                      isDeleting = true;
+                    });
+
+                    final success = await _controller.deleteMusic(music.id);
+
+                    Navigator.pop(context);
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Musik "${music.judul}" berhasil dihapus!'),
+                          backgroundColor: primaryColor,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Gagal menghapus musik: ${_controller.errorMessage}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: isDeleting 
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Hapus', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

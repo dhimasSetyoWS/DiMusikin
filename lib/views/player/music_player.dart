@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class MusicPlayer extends StatelessWidget {
   final String title;
   final String artist;
+  final String? fotoSampul;
 
   const MusicPlayer({
     super.key,
     required this.title,
     required this.artist,
+    this.fotoSampul,
   });
 
   @override
@@ -87,9 +89,9 @@ class MusicPlayer extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(40),
 
-                    image: const DecorationImage(
+                    image: DecorationImage(
                       image: NetworkImage(
-                        "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f",
+                        fotoSampul ?? "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f",
                       ),
                       fit: BoxFit.cover,
                     ),

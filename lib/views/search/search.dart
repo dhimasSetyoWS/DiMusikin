@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../models/music_model.dart';
+import '../../controllers/music_controller.dart';
+import '../player/music_player.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -9,6 +12,7 @@ class SearchPage extends StatefulWidget {
 
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController searchController = TextEditingController();
+  final MusicController _controller = MusicController();
 
   final List<Map<String, String>> popularAlbums = [
     {
@@ -28,34 +32,18 @@ class _SearchPageState extends State<SearchPage> {
     },
   ];
 
-  final List<Map<String, String>> musicList = [
-    {"title": "Golden Night", "artist": "Ariana"},
-    {"title": "Lost Memory", "artist": "Justin"},
-    {"title": "Night Drive", "artist": "The Weeknd"},
-    {"title": "Dream Sky", "artist": "Taylor Swift"},
-  ];
-
-  List<Map<String, String>> filteredMusic = [];
-
   void searchMusic(String query) {
-    final results =
-        musicList.where((music) {
-          final title = music['title']!.toLowerCase();
-          final artist = music['artist']!.toLowerCase();
-
-          return title.contains(query.toLowerCase()) ||
-              artist.contains(query.toLowerCase());
-        }).toList();
-
-    setState(() {
-      filteredMusic = results;
-    });
+    if (query.trim().isEmpty) {
+      _controller.fetchMusicList();
+    } else {
+      _controller.searchMusic(query);
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    filteredMusic = musicList;
+    _controller.fetchMusicList();
   }
 
   @override
@@ -175,61 +163,128 @@ class _SearchPageState extends State<SearchPage> {
 
               const SizedBox(height: 15),
 
-              ListView.builder(
-                itemCount: filteredMusic.length,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final music = filteredMusic[index];
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xffF5EFE4),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          height: 55,
-                          width: 55,
-                          decoration: BoxDecoration(
-                            color: const Color(0xff3F4A2C),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: const Icon(
-                            Icons.music_note,
-                            color: Colors.white,
-                          ),
+              ListenableBuilder(
+                listenable: _controller,
+                builder: (context, child) {
+                  if (_controller.isLoading) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 30),
+                        child: CircularProgressIndicator(
+                          color: Color(0xff3F4A2C),
                         ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                    );
+                  }
+
+                  if (_controller.errorMessage.isNotEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Column(
+                          children: [
+                            Text(
+                              _controller.errorMessage,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            ElevatedButton(
+                              onPressed: () => searchMusic(searchController.text),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xff3F4A2C),
+                              ),
+                              child: const Text("Coba Lagi", style: TextStyle(color: Colors.white)),
+                            )
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (_controller.musicList.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 30),
+                        child: Text(
+                          "Musik tidak ditemukan",
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: _controller.musicList.length,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final music = _controller.musicList[index];
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MusicPlayer(
+                                title: music.judul,
+                                artist: music.artis,
+                                fotoSampul: music.fotoSampul,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xffF5EFE4),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                music['title']!,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xff3F4A2C),
+                              Container(
+                                height: 55,
+                                width: 55,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xff3F4A2C),
+                                  borderRadius: BorderRadius.circular(15),
+                                  image: DecorationImage(
+                                    image: NetworkImage(music.fotoSampul),
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ),
-                              Text(
-                                music['artist']!,
-                                style: const TextStyle(color: Colors.black54),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      music.judul,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xff3F4A2C),
+                                      ),
+                                    ),
+                                    Text(
+                                      music.artis,
+                                      style: const TextStyle(color: Colors.black54),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.play_circle_fill,
+                                color: Color(0xff3F4A2C),
+                                size: 35,
                               ),
                             ],
                           ),
                         ),
-                        const Icon(
-                          Icons.play_circle_fill,
-                          color: Color(0xff3F4A2C),
-                          size: 35,
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
               ),
